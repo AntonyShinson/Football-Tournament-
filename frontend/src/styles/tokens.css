@@ -1,0 +1,230 @@
+/*
+  DESIGN SYSTEM — "Matchday Ticket"
+  Palette: night pitch (near-black forest green) with a whistle-amber accent
+  and a deep turf-green secondary. Signature motif: components are styled
+  like a torn ticket stub (perforated dashed divider) — used for fixtures,
+  results, and the WhatsApp share cards, echoing the idea that every match
+  is a ticket you tear off and pass along.
+
+  Display face: Space Grotesk (condensed, technical, sporty)
+  Body face:    Inter
+  Data face:    JetBrains Mono (scores, codes — anything that must be typed exactly)
+*/
+
+:root {
+  /* Color */
+  --bg: #0e1712;
+  --bg-elevated: #131f18;
+  --surface: #17251d;
+  --surface-2: #1d2f24;
+  --line: #2a3d31;
+  --turf: #2f6b3e;
+  --turf-bright: #4caf5f;
+  --amber: #f2b705;
+  --amber-dim: #b98d0e;
+  --danger: #e2543a;
+  --text: #f3f6f1;
+  --text-muted: #8fa396;
+  --text-faint: #5b6b62;
+
+  /* Type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Layout */
+  --radius: 14px;
+  --radius-sm: 8px;
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 12px 20px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn-primary {
+  background: var(--amber);
+  color: #1a1400;
+}
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.btn-secondary:hover {
+  border-color: var(--turf-bright);
+}
+.btn-danger {
+  background: rgba(226, 84, 58, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(226, 84, 58, 0.4);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Ticket-stub card — the signature element */
+.ticket {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.ticket-divider {
+  position: relative;
+  height: 1px;
+  background-image: linear-gradient(90deg, var(--line) 60%, transparent 0%);
+  background-size: 12px 1px;
+  background-repeat: repeat-x;
+  margin: 0 16px;
+}
+.ticket-divider::before,
+.ticket-divider::after {
+  content: '';
+  position: absolute;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  background: var(--bg);
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+.ticket-divider::before { left: -25px; }
+.ticket-divider::after { right: -25px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 4px 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge-amber { background: rgba(242, 183, 5, 0.15); color: var(--amber); }
+.badge-turf { background: rgba(76, 175, 95, 0.15); color: var(--turf-bright); }
+.badge-danger { background: rgba(226, 84, 58, 0.15); color: var(--danger); }
+.badge-muted { background: var(--surface-2); color: var(--text-muted); }
+
+.input {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 15px;
+  font-family: var(--font-body);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--turf-bright);
+}
+.input::placeholder {
+  color: var(--text-faint);
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--turf-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Team badge circle (replaces flags — initials on a color derived from name) */
+.team-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: #0e1712;
+  flex-shrink: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--turf-bright);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
