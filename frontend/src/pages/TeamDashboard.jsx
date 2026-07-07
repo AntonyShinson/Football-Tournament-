@@ -6,6 +6,7 @@ import {
 import MatchCard from '../components/MatchCard.jsx';
 import MatchActionPanel from '../components/MatchActionPanel.jsx';
 import GroupStandingsTable from '../components/GroupStandingsTable.jsx';
+import KnockoutBracket from '../components/KnockoutBracket.jsx';
 import ShareCard from '../components/ShareCard.jsx';
 
 const STATUS_COPY = {
@@ -19,6 +20,7 @@ export default function TeamDashboard() {
   const navigate = useNavigate();
   const [session] = useState(() => getTeamSession(tournamentId));
 
+  const [activeTab, setActiveTab] = useState('home'); // New Tab State
   const [tournament, setTournament] = useState(null);
   const [teamsById, setTeamsById] = useState({});
   const [matches, setMatches] = useState([]);
@@ -64,56 +66,84 @@ export default function TeamDashboard() {
   const status = STATUS_COPY[team.status];
   const viewer = { type: 'team', teamId: team.id, token: session.token };
 
+  const hasQualified = myKnockoutMatches.length > 0;
+
   return (
     <div className="container">
       <div className="eyebrow">{tournament.name}</div>
       <h1 style={{ fontSize: 28, margin: '8px 0 6px' }}>{team.name}</h1>
-      <span className={`badge ${status.cls}`}>{status.text}</span>
-      <button className="btn btn-secondary" onClick={load} style={{ marginLeft: 10 }}>Refresh</button>
-      <button
-        className="btn btn-secondary"
-        style={{ marginLeft: 10 }}
-        onClick={() => { clearTeamSession(tournamentId); navigate(`/t/${tournamentId}/join`); }}
-      >
-        Switch team
-      </button>
+      
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+         <span className={`badge ${status.cls}`}>{status.text}</span>
+         <button className="btn btn-secondary" onClick={load}>Refresh</button>
+         <button className="btn btn-secondary" onClick={() => { clearTeamSession(tournamentId); navigate(`/t/${tournamentId}/join`); }}>
+           Switch team
+         </button>
+      </div>
 
-      {nextMatch && (
-        <Section title="Your next match">
-          <MatchCard match={nextMatch} teamsById={teamsById}
-            footer={<MatchActionPanel tournamentId={tournamentId} match={nextMatch} teamsById={teamsById} viewer={viewer} onChanged={load} />} />
-        </Section>
+      {/* NEW NAVBAR TABS */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 24, borderBottom: '1px solid var(--line)', paddingBottom: 16 }}>
+        <button 
+           className={`btn ${activeTab === 'home' ? 'btn-primary' : 'btn-secondary'}`} 
+           onClick={() => setActiveTab('home')}
+        >
+           Home & Matches
+        </button>
+        <button 
+           className={`btn ${activeTab === 'knockout' ? 'btn-primary' : 'btn-secondary'}`} 
+           onClick={() => setActiveTab('knockout')}
+        >
+           Knockout Stage
+        </button>
+      </div>
+
+      {/* ======== HOME TAB ======== */}
+      {activeTab === 'home' && (
+        <>
+          {hasQualified && (
+             <div className="ticket" style={{ padding: 18, marginBottom: 28, borderColor: 'var(--turf-bright)', background: 'rgba(57, 255, 20, 0.05)' }}>
+                <h3 style={{ margin: 0, color: 'var(--turf-bright)' }}>🎉 You have been qualified to the next round!</h3>
+             </div>
+          )}
+
+          {nextMatch && (
+            <Section title="Your next match">
+              <MatchCard match={nextMatch} teamsById={teamsById}
+                footer={<MatchActionPanel tournamentId={tournamentId} match={nextMatch} teamsById={teamsById} viewer={viewer} onChanged={load} />} />
+            </Section>
+          )}
+
+          {groupStandings && (
+            <Section title={`${myGroup?.name ?? 'Group'} standings`}>
+              <GroupStandingsTable standings={groupStandings} teamsById={teamsById} qualifyCount={tournament.qualifiersPerGroup} />
+            </Section>
+          )}
+
+          {myGroupMatches.length > 0 && (
+            <Section title="All your group matches">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {myGroupMatches.map((m) => (
+                  <MatchCard key={m.id} match={m} teamsById={teamsById}
+                    footer={m !== nextMatch ? <MatchActionPanel tournamentId={tournamentId} match={m} teamsById={teamsById} viewer={viewer} onChanged={load} /> : null} />
+                ))}
+              </div>
+            </Section>
+          )}
+        </>
       )}
 
-      {groupStandings && (
-        <Section title={`${myGroup?.name ?? 'Group'} standings`}>
-          <GroupStandingsTable standings={groupStandings} teamsById={teamsById} qualifyCount={tournament.qualifiersPerGroup} />
-        </Section>
+      {/* ======== KNOCKOUT TAB ======== */}
+      {activeTab === 'knockout' && (
+         <KnockoutBracket 
+            matches={matches.filter((m) => m.stage === 'knockout')} 
+            teamsById={teamsById}
+            viewer={viewer}
+            tournamentId={tournamentId}
+            onChanged={load}
+         />
       )}
 
-      {myGroupMatches.length > 0 && (
-        <Section title="All your group matches">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {myGroupMatches.map((m) => (
-              <MatchCard key={m.id} match={m} teamsById={teamsById}
-                footer={m !== nextMatch ? <MatchActionPanel tournamentId={tournamentId} match={m} teamsById={teamsById} viewer={viewer} onChanged={load} /> : null} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {myKnockoutMatches.length > 0 && (
-        <Section title="Knockout stage">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {myKnockoutMatches.map((m) => (
-              <MatchCard key={m.id} match={m} teamsById={teamsById} subtitle={m.roundName}
-                footer={<MatchActionPanel tournamentId={tournamentId} match={m} teamsById={teamsById} viewer={viewer} onChanged={load} />} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {nextMatch && (
+      {activeTab === 'home' && nextMatch && (
         <Section title="Share this fixture">
           <ShareCard tournamentName={tournament.name} title={`${teamsById[nextMatch.teamAId]?.name} vs ${teamsById[nextMatch.teamBId]?.name}`}>
             <MatchCard match={nextMatch} teamsById={teamsById} compact />
@@ -122,7 +152,7 @@ export default function TeamDashboard() {
       )}
 
       <p style={{ marginTop: 32, fontSize: 13 }}>
-        <Link to={`/t/${tournamentId}`}>View full tournament (fixtures, standings, bracket)</Link>
+        <Link to={`/t/${tournamentId}`}>View full tournament details</Link>
       </p>
     </div>
   );
