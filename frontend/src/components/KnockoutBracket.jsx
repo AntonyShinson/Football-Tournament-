@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import MatchCard from './MatchCard.jsx';
 import MatchActionPanel from './MatchActionPanel.jsx';
-import { colorForName } from '../lib/idGenerator.js'; // Fallback color if no jersey color
+import { colorForName } from '../lib/idGenerator.js';
 
 // Helper to get initials for inner nodes
 function getInitials(name) {
@@ -11,25 +11,28 @@ function getInitials(name) {
 }
 
 /**
- * Builds a Team-Based Hierarchy from the Matches array.
- * Leaves = Starting Teams.
- * Joints = The Winner of the match between the two branches.
- * Root = Overall Champion.
+ * Builds the FULL theoretical Team-Based Hierarchy.
+ * We calculate the total rounds from Round 1, ensuring all leaves 
+ * are always drawn, even if future matches aren't generated yet.
  */
 function buildTeamHierarchy(matches, teamsById) {
   if (!matches || matches.length === 0) return { name: "TBD" };
 
+  // Group matches by round to easily find them
   const byRound = {};
   matches.forEach(m => {
     byRound[m.round] ??= [];
     byRound[m.round].push(m);
   });
 
-  const maxRound = Math.max(...Object.keys(byRound).map(Number));
-  const finalMatch = byRound[maxRound]?.[0];
+  // Round 1 defines the entire structure of the bracket
+  const round1Matches = byRound[1];
+  if (!round1Matches || round1Matches.length === 0) return { name: "TBD" };
 
-  if (!finalMatch) return { name: "TBD" };
+  // Mathematically calculate total rounds (e.g., 8 matches = 16 teams = 4 rounds)
+  const totalRounds = Math.log2(round1Matches.length * 2);
 
+  // Helper to resolve the winner of a match
   function getWinner(m) {
     if (!m) return null;
     if (m.status === 'confirmed' || m.status === 'bye') {
@@ -40,36 +43,40 @@ function buildTeamHierarchy(matches, teamsById) {
     return null;
   }
 
-  function buildNode(match, round) {
-    if (!match) return { name: "TBD", isLeaf: round === 0 };
+  // Recursively build the tree from the Final (center) out to the Leaves
+  function buildNode(round, slotIndex) {
+    // Find the real match if it has been generated in the DB
+    const realMatch = (byRound[round] || []).find(m => m.slotIndex === slotIndex);
+    const winnerId = getWinner(realMatch);
 
-    const winnerId = getWinner(match);
     const node = {
-      match: match,
+      match: realMatch, 
       teamId: winnerId,
       name: winnerId ? teamsById[winnerId]?.name : "TBD",
       isLeaf: false
     };
 
     if (round === 1) {
-      node.children = [
-        { name: teamsById[match.teamAId]?.name || "TBD", teamId: match.teamAId, isLeaf: true, match },
-        { name: teamsById[match.teamBId]?.name || "TBD", teamId: match.teamBId, isLeaf: true, match }
-      ];
-    } else {
-      const prevRound = byRound[round - 1] || [];
-      const childA = prevRound.find(m => m.slotIndex === match.slotIndex * 2);
-      const childB = prevRound.find(m => m.slotIndex === match.slotIndex * 2 + 1);
+      // Base Case: Round 1 splits into the actual starting Team Leaves
+      const teamAId = realMatch?.teamAId;
+      const teamBId = realMatch?.teamBId;
       
       node.children = [
-        buildNode(childA, round - 1),
-        buildNode(childB, round - 1)
+        { name: teamAId ? teamsById[teamAId]?.name : "TBD", teamId: teamAId, isLeaf: true, match: realMatch },
+        { name: teamBId ? teamsById[teamBId]?.name : "TBD", teamId: teamBId, isLeaf: true, match: realMatch }
+      ];
+    } else {
+      // Recursive Case: Splits into two future match slots
+      node.children = [
+        buildNode(round - 1, slotIndex * 2),
+        buildNode(round - 1, slotIndex * 2 + 1)
       ];
     }
     return node;
   }
 
-  const rootNode = buildNode(finalMatch, maxRound);
+  // The absolute center is the Final match
+  const rootNode = buildNode(totalRounds, 0);
   rootNode.isChampion = true;
   return rootNode;
 }
@@ -207,12 +214,12 @@ export default function KnockoutBracket({ matches, teamsById, viewer, tournament
             if (d.source.depth === 0) return isFinalPlayed ? "#FFD700" : "rgba(255, 255, 255, 0.25)";
             return isWinnerPath ? "#FFD700" : "rgba(255, 255, 255, 0.25)"; 
         })
-        .style("opacity", d => d.source.depth === 0 ? 0 : 1); // Hide dots on the central semi-circle arcs
+        .style("opacity", d => d.source.depth === 0 ? 0 : 1); 
 
     // --- STANDALONE CENTER CHAMPION NODE ---
     const centerGroup = g.append("g")
         .attr("class", "node")
-        .attr("transform", "translate(0,0)"); // Placed exactly at 0,0 inside the 55px gap
+        .attr("transform", "translate(0,0)"); 
 
     // Center Click -> Opens Final Match Panel
     centerGroup.on("click", () => {
@@ -244,7 +251,7 @@ export default function KnockoutBracket({ matches, teamsById, viewer, tournament
         .append("g")
         .attr("class", "node tree-node")
         .attr("transform", d => `translate(${d.y * Math.cos(d.x - Math.PI / 2)},${d.y * Math.sin(d.x - Math.PI / 2)})`)
-        .style("opacity", d => d.depth === 0 ? 0 : 1) // HIDE structural center node so the standalone one shows
+        .style("opacity", d => d.depth === 0 ? 0 : 1) 
         .style("pointer-events", d => d.depth === 0 ? "none" : "all"); 
 
     node.on("click", function(event, d) {
@@ -263,19 +270,17 @@ export default function KnockoutBracket({ matches, teamsById, viewer, tournament
         .attr("class", "initials")
         .text(d => getInitials(d.data.name));
 
-    // Full Names (Hidden by CSS until hovered)
+    // Full Names
     node.append("text")
         .attr("class", "full-name")
         .attr("dy", "0.31em")
         .attr("x", d => d.x < Math.PI ? nodeRadius + 12 : -(nodeRadius + 12)) 
         .style("text-anchor", d => d.x < Math.PI ? "start" : "end") 
-        .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null) // Keeps text purely horizontal
+        .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null) 
         .text(d => d.data.name); 
 
-    // Center camera on load
     svg.call(zoom.transform, d3.zoomIdentity.translate(w / 2, h / 2).scale(1));
 
-    // Handle Resize
     const handleResize = () => {
       svg.call(zoom.transform, d3.zoomIdentity.translate(containerRef.current.clientWidth / 2, containerRef.current.clientHeight / 2).scale(1));
     };
@@ -286,7 +291,7 @@ export default function KnockoutBracket({ matches, teamsById, viewer, tournament
   }, [data, matches.length, teamsById, view, isFinalPlayed, championTeam, finalMatch, viewer]);
 
   if (matches.length === 0) {
-     return <p style={{ fontSize: 13, margin: '20px 0' }}>The bracket hasn't been generated yet.</p>;
+     return <div className="ticket" style={{ padding: 18 }}><p style={{ fontSize: 13, margin: 0 }}>The bracket hasn't been generated yet.</p></div>;
   }
 
   const isMobile = window.innerWidth < 768;
@@ -295,7 +300,6 @@ export default function KnockoutBracket({ matches, teamsById, viewer, tournament
   return (
     <div style={{ position: 'relative', width: '100%' }}>
       
-      {/* CSS For SVG Interactive Hover states and text hiding */}
       <style>{`
         .bracket-svg .node { cursor: pointer; }
         .bracket-svg .node circle { stroke: none; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
