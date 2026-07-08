@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Cup Style Radial Bracket</title>
+    <style>
+        /* Base full screen styles */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #111111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden;
+            color: #ffffff;
+        }
+
+        #bracket-container {
+            width: 100vw; 
+            height: 100vh;
+            background-color: #111111;
+            position: relative;
+            overflow: hidden;
+        }
+
+        @media (min-width: 768px) {
+            #bracket-container {
+                width: 66vw; 
+            }
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            touch-action: none;
+            cursor: grab;
+        }
+        svg:active { cursor: grabbing; }
+
+        .node { 
+            cursor: pointer; 
+        }
+        
+        .node circle {
+            stroke: none; /* Removed black border */
+            transition: fill 0.3s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+        }
+
+        .node text.initials {
+            font-size: 12px;
+            font-weight: bold;
+            fill: #ffffff;
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+        }
+
+        .node text.full-name {
+            font-size: 14px;
+            fill: #ffffff;
+            font-weight: 600;
+            opacity: 0; 
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+            text-shadow: 0px 2px 4px rgba(0,0,0,0.8);
+        }
+        
+        .node.active text.full-name {
+            opacity: 1;
+        }
+
+        /* Hover animations for Desktop */
+        @media (hover: hover) and (pointer: fine) {
+            .node:hover circle {
+                transform: scale(1.35); 
+            }
+            .node:hover text.full-name {
+                opacity: 1; 
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="bracket-container">
+        <svg id="bracket-svg"></svg>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <script>
+        // ==========================================
+        // 1. GENERATE DUMMY DATA
+        // ==========================================
+        const numTeams = 32;
+        const teams = Array.from({ length: numTeams }, (_, i) => ({
+            id: i + 1,
+            name: `Team ${i + 1}`,
+            short: `T${i + 1}`,
+            color: `hsl(${(i * 360) / numTeams}, 60%, 40%)`
+        }));
+
+        function buildTournamentTree(depth, availableTeams) {
+            if (depth === 0) {
+                return { isLeaf: true, team: availableTeams.shift() };
+            }
+            const leftChild = buildTournamentTree(depth - 1, availableTeams);
+            const rightChild = buildTournamentTree(depth - 1, availableTeams);
+            
+            const winner = Math.random() > 0.5 ? leftChild.team : rightChild.team;
+
+            return {
+                isLeaf: false,
+                children: [leftChild, rightChild],
+                team: winner
+            };
+        }
+
+        const maxDepth = Math.log2(numTeams);
+        let teamsCopy = [...teams];
+        const tournamentData = buildTournamentTree(maxDepth, teamsCopy);
+        tournamentData.isChampion = true; 
+
+        // Global State for Interactive Final
+        let finalPlayed = false;
+
+        // ==========================================
+        // 2. D3.JS RENDER LOGIC
+        // ==========================================
+        const container = document.getElementById('bracket-container');
+        const svg = d3.select("#bracket-svg");
+        const g = svg.append("g");
+
+        function render() {
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            svg.attr("viewBox", `0 0 ${w} ${h}`);
+
+            const radius = Math.min(w, h) / 2 - 110; 
+            const nodeRadius = Math.max(14, Math.min(w, h) / 40); 
+            
+            const root = d3.hierarchy(tournamentData);
+            const cluster = d3.cluster().size([2 * Math.PI, radius]);
+            cluster(root);
+
+            // Shift all structural nodes outward by 55px to create the beautiful center arcs!
+            root.descendants().forEach(d => {
+                d.y = d.y + 55; 
+            });
+
+            // Zoom logic: dynamically scale line thickness
+            const zoom = d3.zoom()
+                .scaleExtent([0.15, 8])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                    
+                    const k = event.transform.k;
+                    const dampening = Math.pow(k, 0.65); 
+
+                    g.selectAll(".link")
+                        .attr("stroke-width", d => {
+                            const isWinner = (d.source.depth === 0 && finalPlayed) || (d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id);
+                            return (isWinner ? 2.5 : 1) / dampening; 
+                        });
+                        
+                    g.selectAll(".elbow-dot")
+                        .attr("r", d => {
+                            const isWinner = (d.source.depth === 0 && finalPlayed) || (d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id);
+                            return (isWinner ? 3 : 2.5) / dampening;
+                        });
+                });
+
+            svg.call(zoom);
+            g.selectAll("*").remove(); 
+
+            // --- REDUCED SVG GLOW FILTER ---
+            const defs = g.append("defs");
+            const filter = defs.append("filter").attr("id", "gold-glow");
+            filter.append("feGaussianBlur").attr("stdDeviation", "1.5").attr("result", "coloredBlur"); 
+            const feMerge = filter.append("feMerge");
+            feMerge.append("feMergeNode").attr("in", "coloredBlur");
+            feMerge.append("feMergeNode").attr("in", "SourceGraphic");
+
+            // --- ELBOW LINES (WITH ARCS) ---
+            function elbow(d) {
+                const r0 = d.source.y; 
+                const r1 = d.target.y; 
+                const a0 = d.source.x - Math.PI / 2;
+                const a1 = d.target.x - Math.PI / 2;
+
+                const sx = r0 * Math.cos(a0);
+                const sy = r0 * Math.sin(a0);
+                const arcX = r0 * Math.cos(a1);
+                const arcY = r0 * Math.sin(a1);
+                const ex = r1 * Math.cos(a1);
+                const ey = r1 * Math.sin(a1);
+
+                let sweep = a1 > a0 ? 1 : 0;
+                if (a1 - a0 > Math.PI) sweep = 0;
+                if (a0 - a1 > Math.PI) sweep = 1;
+
+                return `M ${sx} ${sy} A ${r0} ${r0} 0 0 ${sweep} ${arcX} ${arcY} L ${ex} ${ey}`;
+            }
+
+            g.selectAll(".link")
+                .data(root.links())
+                .enter()
+                .append("path")
+                .attr("class", "link")
+                .attr("d", elbow)
+                .attr("fill", "none")
+                .attr("stroke", d => {
+                    const isWinnerPath = d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id;
+                    if (d.source.depth === 0) return finalPlayed ? "#FFD700" : "rgba(255, 255, 255, 0.15)"; 
+                    return isWinnerPath ? "#FFD700" : "rgba(255, 255, 255, 0.15)"; 
+                })
+                .attr("stroke-width", d => {
+                    const isWinnerPath = d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id;
+                    if (d.source.depth === 0) return finalPlayed ? 2.5 : 1;
+                    return isWinnerPath ? 2.5 : 1;
+                })
+                .attr("filter", d => {
+                    const isWinnerPath = d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id;
+                    if (d.source.depth === 0) return finalPlayed ? "url(#gold-glow)" : null;
+                    return isWinnerPath ? "url(#gold-glow)" : null;
+                });
+
+            g.selectAll(".elbow-dot")
+                .data(root.links())
+                .enter()
+                .append("circle")
+                .attr("class", "elbow-dot")
+                .attr("r", d => {
+                    const isWinnerPath = d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id;
+                    return (d.source.depth === 0 && finalPlayed) || isWinnerPath ? 3 : 2.5;
+                })
+                .attr("cx", d => d.source.y * Math.cos(d.target.x - Math.PI / 2))
+                .attr("cy", d => d.source.y * Math.sin(d.target.x - Math.PI / 2))
+                .attr("fill", d => {
+                    const isWinnerPath = d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id;
+                    if (d.source.depth === 0) return finalPlayed ? "#FFD700" : "rgba(255, 255, 255, 0.25)";
+                    return isWinnerPath ? "#FFD700" : "rgba(255, 255, 255, 0.25)"; 
+                })
+                .style("opacity", d => d.source.depth === 0 ? 0 : 1); // Hide dots on the semi-circle arcs
+
+            // --- STANDALONE CENTER CHAMPION NODE (INTERACTIVE) ---
+            const centerGroup = g.append("g")
+                .attr("class", "node")
+                .attr("transform", "translate(0,0)"); // Placed exactly at 0,0 inside the 55px gap
+
+            centerGroup.append("circle")
+                .attr("r", 35) // Perfect size to leave a gap between it and the 55px arcs
+                .attr("fill", finalPlayed ? tournamentData.team.color : "#FFD700")
+                .attr("filter", "url(#gold-glow)");
+
+            centerGroup.append("text")
+                .attr("class", "initials")
+                .text(finalPlayed ? tournamentData.team.short : "");
+
+            centerGroup.append("text")
+                .attr("class", "full-name")
+                .attr("dy", "0.31em")
+                .attr("x", 48) // Offset to the right
+                .style("text-anchor", "start")
+                .text(finalPlayed ? tournamentData.team.name : "Click to Play Final");
+
+            // Interaction: Click center circle to simulate Final Match
+            centerGroup.on("click", function() {
+                finalPlayed = !finalPlayed; // Toggle state
+                
+                // Animate circle color and update text
+                d3.select(this).select("circle")
+                    .attr("fill", finalPlayed ? tournamentData.team.color : "#FFD700");
+                
+                d3.select(this).select(".initials")
+                    .text(finalPlayed ? tournamentData.team.short : "");
+                    
+                d3.select(this).select(".full-name")
+                    .text(finalPlayed ? tournamentData.team.name : "Click to Play Final");
+
+                // Instantly update the lines connecting to the center
+                g.selectAll(".link")
+                    .attr("stroke", d => {
+                        const isWinnerPath = d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id;
+                        if (d.source.depth === 0) return finalPlayed ? "#FFD700" : "rgba(255, 255, 255, 0.15)";
+                        return isWinnerPath ? "#FFD700" : "rgba(255, 255, 255, 0.15)";
+                    })
+                    .attr("filter", d => {
+                        const isWinnerPath = d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id;
+                        if (d.source.depth === 0) return finalPlayed ? "url(#gold-glow)" : null;
+                        return isWinnerPath ? "url(#gold-glow)" : null;
+                    })
+                    .attr("stroke-width", d => {
+                        const isWinnerPath = d.source.data.team && d.target.data.team && d.source.data.team.id === d.target.data.team.id;
+                        const k = d3.zoomTransform(svg.node()).k;
+                        const dampening = Math.pow(k, 0.65);
+                        if (d.source.depth === 0) return (finalPlayed ? 2.5 : 1) / dampening;
+                        return (isWinnerPath ? 2.5 : 1) / dampening;
+                    });
+            });
+
+            // --- INNER/OUTER STRUCTURAL NODES ---
+            const node = g.selectAll(".tree-node")
+                .data(root.descendants())
+                .enter()
+                .append("g")
+                .attr("class", "node tree-node")
+                .attr("transform", d => `translate(${d.y * Math.cos(d.x - Math.PI / 2)},${d.y * Math.sin(d.x - Math.PI / 2)})`)
+                .style("opacity", d => d.depth === 0 ? 0 : 1) // HIDE structural center node (we use our standalone one above)
+                .style("pointer-events", d => d.depth === 0 ? "none" : "all"); // Disable clicks on hidden node
+
+            node.on("click", function(event, d) {
+                const isActive = d3.select(this).classed("active");
+                d3.selectAll(".node").classed("active", false);
+                if (!isActive) {
+                    d3.select(this).classed("active", true);
+                }
+            });
+
+            node.append("circle")
+                .attr("r", nodeRadius)
+                .attr("fill", d => d.data.team.color);
+
+            node.append("text")
+                .attr("class", "initials")
+                .text(d => d.data.team.short);
+
+            node.append("text")
+                .attr("class", "full-name")
+                .attr("dy", "0.31em")
+                .attr("x", d => d.x < Math.PI ? nodeRadius + 12 : -(nodeRadius + 12)) 
+                .style("text-anchor", d => d.x < Math.PI ? "start" : "end") 
+                .text(d => d.data.team.name); 
+
+            // Center camera on load
+            svg.call(zoom.transform, d3.zoomIdentity.translate(w / 2, h / 2).scale(1));
+        }
+
+        render();
+        window.addEventListener('resize', render);
+
+    </script>
+</body>
+</html>
