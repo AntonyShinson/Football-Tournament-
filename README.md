@@ -1,5 +1,7 @@
 # FootballHub
 
+https://football-tournament-drab.vercel.app/
+
 A no-login football tournament manager. Organizers create a tournament with a
 password (no account); teams join with a name + password of their own choosing.
 Everything else — group draws, fixtures, standings, score confirmation,
